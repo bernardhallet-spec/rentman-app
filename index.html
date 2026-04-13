@@ -514,11 +514,24 @@ function extractId(str) {
 function displayEquipment(eq) {
   document.getElementById('article-name').textContent = eq.name || eq.displayname || 'Sans nom';
   document.getElementById('article-code').textContent = '#' + eq.id + (eq.code ? '  ·  ' + eq.code : '');
-  document.getElementById('stat-stock').textContent = eq.in_quantity != null ? eq.in_quantity : '—';
-  document.getElementById('stat-total').textContent = eq.quantity != null ? eq.quantity : '—';
+  document.getElementById('stat-stock').textContent = '…';
+  document.getElementById('stat-total').textContent = '…';
+  document.getElementById('qty-input').value = 0;
 
-  const qty = eq.in_quantity != null ? eq.in_quantity : 0;
-  document.getElementById('qty-input').value = qty;
+  // Charge la quantité via stockmovements (somme des mouvements)
+  apiGet('/stockmovements?equipment=/equipment/' + eq.id + '&limit=500')
+    .then(res => {
+      let total = 0;
+      if (res && res.data) {
+        res.data.forEach(m => { total += (m.amount || 0); });
+      }
+      document.getElementById('stat-stock').textContent = total;
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('qty-input').value = total;
+    })
+    .catch(() => {
+      document.getElementById('stat-stock').textContent = '—';
+    });
 
   const icons = ['📷','🎬','💡','🔊','🎤','🖥️','🎛️','📺','🔌','📦'];
   document.getElementById('article-icon').textContent = icons[eq.id % icons.length];
