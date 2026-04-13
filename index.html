@@ -494,9 +494,6 @@ async function lookupEquipment(qrData) {
       if (r5 && r5.data && r5.data.length > 0) equipment = r5.data[0];
     }
 
-    // (fallback original kept below)
-    if (false) {
-
     hideLoading();
 
     if (!equipment) {
