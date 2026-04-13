@@ -1,5 +1,5 @@
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtZWRld2Vya2VyIjoyMzYsImFjY291bnQiOiJhYmhzZXJ2aWNlcyIsImNsaWVudF90eXBlIjoib3BlbmFwaSIsImNsaWVudC5uYW1lIjoib3BlbmFwaSIsImV4cCI6MjA4MTc2MTMxMywiaXNzIjoie1wibmFtZVwiOlwiYmFja2VuZFwiLFwidmVyc2lvblwiOlwiNC44MDguMC44XCJ9IiwiaWF0IjoxNzY2MjI4NTEzfQ.ayJQWTSZUfnD1nmvW0LCt0lrX1_FQaGQixaNTciA7og';
-const RENTMAN_BASE = 'https://api.rentman.net';
+const BASE = 'https://api.rentman.net';
 
 exports.handler = async (event) => {
   const headers = {
@@ -9,39 +9,35 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json'
   };
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
-  const path = (event.queryStringParameters && event.queryStringParameters.path) || '/equipment';
-  const method = event.httpMethod;
-  const url = RENTMAN_BASE + path;
+  const rawPath = (event.queryStringParameters && event.queryStringParameters.path) || '/equipment';
+  const url = BASE + rawPath;
 
   try {
-    const fetchOptions = {
-      method: method,
+    const opts = {
+      method: event.httpMethod,
       headers: {
         'Authorization': 'Bearer ' + API_KEY,
         'Content-Type': 'application/json'
       }
     };
-
-    if (event.body && ['POST', 'PUT', 'PATCH'].includes(method)) {
-      fetchOptions.body = event.body;
+    if (event.body && ['POST', 'PUT', 'PATCH'].includes(event.httpMethod)) {
+      opts.body = event.body;
     }
 
-    const response = await fetch(url, fetchOptions);
-    const data = await response.json();
+    const response = await fetch(url, opts);
+    const text = await response.text();
 
     return {
       statusCode: response.status,
-      headers: headers,
-      body: JSON.stringify(data)
+      headers,
+      body: text
     };
   } catch (error) {
     return {
       statusCode: 500,
-      headers: headers,
+      headers,
       body: JSON.stringify({ error: error.message })
     };
   }
