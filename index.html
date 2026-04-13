@@ -566,30 +566,27 @@ async function saveStock() {
   btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
 
   try {
-    // Enregistre localement (droits API insuffisants pour écriture directe)
-    // Le CSV exporté contiendra les ajustements à faire dans Rentman
     const currentStock = parseInt(document.getElementById('stat-stock').textContent) || 0;
     const diff = qty - currentStock;
-    // Stockage local uniquement - pas d'appel API d'écriture
 
     scanCount++;
     sessionLog.unshift({
       id: currentEquipment.id,
       name: currentEquipment.name || currentEquipment.displayname,
       code: currentEquipment.code,
-      qty, time: new Date(), ok: true
+      qr: currentEquipment.qrcodes,
+      stockAvant: currentStock,
+      qty,
+      diff,
+      time: new Date(),
+      ok: true
     });
     document.getElementById('scan-count').textContent = scanCount + ' scan' + (scanCount > 1 ? 's' : '');
-    showToast('✓ Enregistré — ' + qty + ' unités', 'success');
+    showToast('✓ Enregistré — ' + qty + ' unités (Δ' + (diff >= 0 ? '+' : '') + diff + ')', 'success');
     hideArticleCard();
     setTimeout(() => { if (currentTab === 'scan') startScanner(); }, 1500);
   } catch(e) {
-    sessionLog.unshift({
-      id: currentEquipment.id,
-      name: currentEquipment.name || currentEquipment.displayname,
-      qty, time: new Date(), ok: false
-    });
-    showToast('Erreur sauvegarde', 'error');
+    console.error(e);
   } finally {
     btn.disabled = false;
     btn.innerHTML = '✓ Enregistrer dans Rentman';
