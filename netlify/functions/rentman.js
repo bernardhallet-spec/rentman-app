@@ -1,4 +1,5 @@
-const BASE = 'https://api.rentman.net';
+const https = require('https');
+const BASE_HOST = 'api.rentman.net';
 
 exports.handler = async (event) => {
   const API_KEY = process.env.RENTMAN_API_KEY;
@@ -12,23 +13,38 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
   const rawPath = (event.queryStringParameters && event.queryStringParameters.path) || '/equipment';
-  const url = BASE + rawPath;
+  const method = event.httpMethod;
+  const bodyData = (event.body && ['POST','PUT','PATCH'].includes(method)) ? event.body : null;
 
-  try {
-    const reqHeaders = {
-      'Authorization': 'Bearer ' + API_KEY,
-      'Content-Type': 'application/json'
+  return new Promise((resolve) => {
+    const options = {
+      hostname: BASE_HOST,
+      path: rawPath,
+      method: method,
+      headers: {
+        'Authorization': 'Bearer ' + API_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
     };
 
-    const opts = { method: event.httpMethod, headers: reqHeaders };
-    if (event.body && ['POST', 'PUT', 'PATCH'].includes(event.httpMethod)) {
-      opts.body = event.body;
+    if (bodyData) {
+      options.headers['Content-Length'] = Buffer.byteLength(bodyData);
     }
 
-    const response = await fetch(url, opts);
-    const text = await response.text();
-    return { statusCode: response.status, headers, body: text };
-  } catch (error) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
-  }
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        resolve({ statusCode: res.statusCode, headers, body: data });
+      });
+    });
+
+    req.on('error', (e) => {
+      resolve({ statusCode: 500, headers, body: JSON.stringify({ error: e.message }) });
+    });
+
+    if (bodyData) req.write(bodyData);
+    req.end();
+  });
 };
