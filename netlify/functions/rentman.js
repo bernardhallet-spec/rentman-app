@@ -15,13 +15,15 @@ exports.handler = async (event) => {
   const url = BASE + rawPath;
 
   try {
+    const fetchHeaders = new Headers();
+    fetchHeaders.set('Authorization', 'Bearer ' + API_KEY);
+    fetchHeaders.set('Content-Type', 'application/json');
+
     const opts = {
       method: event.httpMethod,
-      headers: {
-        'Authorization': 'Bearer ' + API_KEY,
-        'Content-Type': 'application/json'
-      }
+      headers: fetchHeaders
     };
+
     if (event.body && ['POST', 'PUT', 'PATCH'].includes(event.httpMethod)) {
       opts.body = event.body;
     }
@@ -29,16 +31,8 @@ exports.handler = async (event) => {
     const response = await fetch(url, opts);
     const text = await response.text();
 
-    return {
-      statusCode: response.status,
-      headers,
-      body: text
-    };
+    return { statusCode: response.status, headers, body: text };
   } catch (error) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: error.message })
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
   }
 };
