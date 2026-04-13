@@ -473,10 +473,29 @@ async function lookupEquipment(qrData) {
     }
 
     if (!equipment) {
-      // Recherche par code ou nom
-      const res = await apiGet('/equipment?search=' + encodeURIComponent(qrData) + '&limit=5');
-      if (res && res.data && res.data.length > 0) equipment = res.data[0];
+      // 1. QR code exact
+      const r1 = await apiGet('/equipment?filter[qr_code]=' + encodeURIComponent(qrData) + '&limit=1');
+      if (r1 && r1.data && r1.data.length > 0) equipment = r1.data[0];
     }
+
+    // 2. Numéro de série QR code
+    if (!equipment) {
+      const r2 = await apiGet('/serialnumbers?filter[qr_code]=' + encodeURIComponent(qrData) + '&limit=1');
+      if (r2 && r2.data && r2.data.length > 0) {
+        const serial = r2.data[0];
+        const equipId = serial.equipment ? serial.equipment.split('/').pop() : null;
+        if (equipId) { const r3 = await apiGet('/equipment/' + equipId); if (r3 && r3.data) equipment = r3.data; }
+      }
+    }
+
+    // 3. Recherche texte libre
+    if (!equipment) {
+      const r5 = await apiGet('/equipment?search=' + encodeURIComponent(qrData) + '&limit=5');
+      if (r5 && r5.data && r5.data.length > 0) equipment = r5.data[0];
+    }
+
+    // (fallback original kept below)
+    if (false) {
 
     hideLoading();
 
