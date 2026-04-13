@@ -1,58 +1,61 @@
 const https = require('https');
-const BASE_HOST = 'api.rentman.net';
 
 exports.handler = async (event) => {
+  // Get token ONLY from environment - never from request headers
   const API_KEY = process.env.RENTMAN_API_KEY;
-  const headers = {
+  
+  const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
     'Content-Type': 'application/json'
   };
 
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers: corsHeaders, body: '' };
+  }
 
   const rawPath = (event.queryStringParameters && event.queryStringParameters.path) || '/equipment';
   const method = event.httpMethod;
-  const bodyData = (event.body && ['POST','PUT','PATCH'].includes(method)) ? event.body : null;
+  const bodyData = (event.body && ['POST', 'PUT', 'PATCH'].includes(method)) ? event.body : null;
 
-  // Debug: log token prefix and method
-  console.log('Method:', method, '| Path:', rawPath, '| Token prefix:', API_KEY ? API_KEY.slice(0,20) : 'MISSING');
+  console.log('CALL:', method, rawPath, '| KEY_LEN:', API_KEY ? API_KEY.length : 0);
 
   return new Promise((resolve) => {
-    const reqHeaders = {
+    const outHeaders = {
       'Authorization': 'Bearer ' + API_KEY,
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'User-Agent': 'RentmanInventoryApp/1.0'
+      'Accept': 'application/json'
     };
 
     if (bodyData) {
-      reqHeaders['Content-Length'] = Buffer.byteLength(bodyData);
+      const len = Buffer.byteLength(bodyData, 'utf8');
+      outHeaders['Content-Length'] = len;
+      console.log('BODY:', bodyData.slice(0, 100), '| LEN:', len);
     }
 
     const options = {
-      hostname: BASE_HOST,
+      hostname: 'api.rentman.net',
       path: rawPath,
       method: method,
-      headers: reqHeaders
+      headers: outHeaders
     };
 
     const req = https.request(options, (res) => {
       let data = '';
-      res.on('data', chunk => { data += chunk; });
+      res.on('data', c => { data += c; });
       res.on('end', () => {
-        console.log('Rentman response status:', res.statusCode);
-        resolve({ statusCode: res.statusCode, headers, body: data });
+        console.log('RENTMAN:', res.statusCode, data.slice(0, 200));
+        resolve({ statusCode: res.statusCode, headers: corsHeaders, body: data });
       });
     });
 
     req.on('error', (e) => {
-      console.log('Request error:', e.message);
-      resolve({ statusCode: 500, headers, body: JSON.stringify({ error: e.message }) });
+      console.log('ERROR:', e.message);
+      resolve({ statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: e.message }) });
     });
 
-    if (bodyData) req.write(bodyData);
+    if (bodyData) req.write(bodyData, 'utf8');
     req.end();
   });
 };
