@@ -378,6 +378,16 @@ async function apiGet(path) {
   return res.json();
 }
 
+async function apiPost(path, body) {
+  const res = await fetch(PROXY + '?path=' + encodeURIComponent(path), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
 async function apiPatch(path, body) {
   const res = await fetch(PROXY + '?path=' + encodeURIComponent(path), {
     method: 'PATCH',
@@ -556,7 +566,18 @@ async function saveStock() {
   btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
 
   try {
-    await apiPatch('/equipment/' + currentEquipment.id, { in_quantity: qty });
+    // Calcule le stock actuel et crée un mouvement de correction
+    const currentStock = parseInt(document.getElementById('stat-stock').textContent) || 0;
+    const diff = qty - currentStock;
+    if (diff !== 0) {
+      await apiPost('/stockmovements', {
+        equipment: '/equipment/' + currentEquipment.id,
+        amount: diff,
+        description: 'Inventaire via app',
+        type: 'mutation',
+        stock_location: '/stocklocations/1'
+      });
+    }
 
     scanCount++;
     sessionLog.unshift({
