@@ -566,18 +566,11 @@ async function saveStock() {
   btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
 
   try {
-    // Calcule le stock actuel et crée un mouvement de correction
+    // Enregistre localement (droits API insuffisants pour écriture directe)
+    // Le CSV exporté contiendra les ajustements à faire dans Rentman
     const currentStock = parseInt(document.getElementById('stat-stock').textContent) || 0;
     const diff = qty - currentStock;
-    if (diff !== 0) {
-      await apiPost('/stockmovements', {
-        equipment: '/equipment/' + currentEquipment.id,
-        amount: diff,
-        description: 'Inventaire via app',
-        type: 'mutation',
-        stock_location: '/stocklocations/1'
-      });
-    }
+    // Stockage local uniquement - pas d'appel API d'écriture
 
     scanCount++;
     sessionLog.unshift({
