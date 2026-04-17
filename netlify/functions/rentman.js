@@ -1,5 +1,5 @@
 const https = require('https');
-const { URL } = require('url');
+const crypto = require('crypto');
 
 exports.handler = async (event) => {
   const API_KEY = process.env.RENTMAN_API_KEY;
@@ -16,48 +16,48 @@ exports.handler = async (event) => {
   const method = event.httpMethod;
   const bodyData = (event.body && ['POST','PUT','PATCH'].includes(method)) ? event.body : null;
 
-  // Build exact Authorization header value
-  const authValue = 'Bearer ' + API_KEY;
-  console.log('AUTH_HEADER:', authValue.slice(0,30) + '...');
-  console.log('METHOD:', method, 'PATH:', rawPath);
-  if (bodyData) console.log('BODY_PREVIEW:', bodyData.slice(0,100));
-
   return new Promise((resolve) => {
     const bodyBuf = bodyData ? Buffer.from(bodyData, 'utf8') : null;
-    
+
+    const reqHeaders = {
+      'Authorization': 'Bearer ' + API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+
+    // Add HMAC signature for write operations (Rentman requires it)
+    if (bodyBuf) {
+      const hmac = crypto.createHmac('sha256', API_KEY);
+      hmac.update(bodyBuf);
+      const digest = hmac.digest('base64');
+      reqHeaders['Digest'] = 'sha256=' + digest;
+      reqHeaders['Content-Length'] = bodyBuf.length;
+      console.log('DIGEST:', 'sha256=' + digest.slice(0,20) + '...');
+    }
+
+    console.log('METHOD:', method, 'PATH:', rawPath);
+
     const options = {
       hostname: 'api.rentman.net',
       port: 443,
       path: rawPath,
       method: method,
-      headers: {
-        'Authorization': authValue,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Accept-Encoding': 'identity',
-        'Connection': 'close'
-      },
-      // Disable any agent that might add headers
+      headers: reqHeaders,
       agent: new https.Agent({ keepAlive: false })
     };
-    
-    if (bodyBuf) {
-      options.headers['Content-Length'] = bodyBuf.length;
-    }
 
     const req = https.request(options, (res) => {
       const chunks = [];
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        console.log('RENTMAN_STATUS:', res.statusCode);
-        console.log('RENTMAN_BODY:', body.slice(0, 200));
+        console.log('STATUS:', res.statusCode, '| BODY:', body.slice(0,200));
         resolve({ statusCode: res.statusCode, headers: cors, body });
       });
     });
 
     req.on('error', (e) => {
-      console.log('REQ_ERROR:', e.message);
+      console.log('ERROR:', e.message);
       resolve({ statusCode: 500, headers: cors, body: JSON.stringify({ error: e.message }) });
     });
 
