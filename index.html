@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Rentman Inventaire</title>
-<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
   :root{--bg:#0a0a0f;--surface:#13131a;--surface2:#1c1c27;--border:#2a2a3d;--accent:#6c63ff;--accent2:#ff6584;--green:#00e5a0;--text:#e8e8f0;--muted:#6b6b80;--radius:16px}
@@ -147,10 +147,11 @@
   </div>
 </div>
 <div id="toast"></div>
+<canvas id="qr-canvas" style="display:none;"></canvas>
 
 <script>
 const PROXY = '/.netlify/functions/rentman';
-let scanning = false, codeReader = null;
+let scanning = false, videoStream = null, scanLoop = null;
 let currentEquipment = null, sessionLog = [], scanCount = 0, currentTab = 'scan';
 
 (async function checkConnection() {
@@ -186,18 +187,23 @@ function switchTab(tab) {
   if (tab === 'log') renderLog();
 }
 
-async function toggleScanner() {
-  if (scanning) { stopScanner(); return; }
-  await startScanner();
-}
+async function toggleScanner() { if (scanning) { stopScanner(); return; } await startScanner(); }
 
 async function startScanner() {
+  document.getElementById('scanner-status').textContent = '⏳ Demande accès caméra…';
   try {
-    codeReader = new ZXing.BrowserMultiFormatReader();
-    const devices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-    // Préférer la caméra arrière
-    const device = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment')) || devices[devices.length - 1];
-    const deviceId = device ? device.deviceId : undefined;
+    // Essayer d'abord la caméra arrière, sinon n'importe quelle caméra
+    try {
+      videoStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: {exact: 'environment'} }
+      });
+    } catch(e) {
+      videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+
+    const video = document.getElementById('qr-video');
+    video.srcObject = videoStream;
+    await video.play();
 
     document.getElementById('scanner-wrapper').style.display = 'block';
     document.getElementById('start-scan-btn').className = 'scanning';
@@ -205,30 +211,42 @@ async function startScanner() {
     document.getElementById('scan-icon').textContent = '⏹';
     document.getElementById('scanner-status').textContent = '🔍 Pointez vers un QR code…';
     scanning = true;
-
-    await codeReader.decodeFromVideoDevice(deviceId, 'qr-video', (result, err) => {
-      if (result) {
-        const data = result.getText();
-        stopScanner();
-        document.getElementById('manual-code').value = data;
-        lookupEquipment(data);
-      }
-    });
+    requestAnimationFrame(tick);
   } catch(e) {
-    showToast('Accès caméra refusé', 'error');
-    document.getElementById('scanner-status').textContent = '⚠️ Accès caméra refusé';
-    scanning = false;
+    document.getElementById('scanner-status').textContent = '⚠️ ' + (e.name === 'NotAllowedError' ? 'Permission caméra refusée — autorisez dans les réglages' : e.message);
+    showToast('Caméra inaccessible', 'error');
   }
 }
 
 function stopScanner() {
   scanning = false;
-  if (codeReader) { codeReader.reset(); codeReader = null; }
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+  if (scanLoop) { cancelAnimationFrame(scanLoop); scanLoop = null; }
   document.getElementById('scanner-wrapper').style.display = 'none';
   document.getElementById('start-scan-btn').className = '';
   document.getElementById('scan-btn-label').textContent = 'Démarrer le scanner';
   document.getElementById('scan-icon').textContent = '📷';
   document.getElementById('scanner-status').textContent = 'Appuyez pour activer la caméra';
+}
+
+function tick() {
+  if (!scanning) return;
+  const video = document.getElementById('qr-video');
+  const canvas = document.getElementById('qr-canvas');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = 400; canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, 400, 400);
+    const imageData = ctx.getImageData(0, 0, 400, 400);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {inversionAttempts: 'attemptBoth'});
+    if (code) {
+      stopScanner();
+      document.getElementById('manual-code').value = code.data;
+      lookupEquipment(code.data);
+      return;
+    }
+  }
+  scanLoop = requestAnimationFrame(tick);
 }
 
 async function lookupManual() {
@@ -310,21 +328,13 @@ async function saveStock() {
       });
     }
     scanCount++;
-    sessionLog.unshift({
-      id: currentEquipment.id,
-      name: currentEquipment.name || currentEquipment.displayname,
-      code: currentEquipment.code, qty, diff, time: new Date(), ok: true
-    });
+    sessionLog.unshift({ id: currentEquipment.id, name: currentEquipment.name || currentEquipment.displayname, code: currentEquipment.code, qty, diff, time: new Date(), ok: true });
     document.getElementById('scan-count').textContent = scanCount + ' scan' + (scanCount > 1 ? 's' : '');
     showToast('✓ Enregistré — ' + qty + ' unités', 'success');
     hideArticleCard();
     setTimeout(() => { if (currentTab === 'scan') startScanner(); }, 1500);
   } catch(e) {
-    sessionLog.unshift({
-      id: currentEquipment.id,
-      name: currentEquipment.name || currentEquipment.displayname,
-      qty, time: new Date(), ok: false
-    });
+    sessionLog.unshift({ id: currentEquipment.id, name: currentEquipment.name || currentEquipment.displayname, qty, time: new Date(), ok: false });
     showToast('Erreur sauvegarde', 'error');
     console.error(e);
   } finally {
