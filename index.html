@@ -569,6 +569,16 @@ async function saveStock() {
     const currentStock = parseInt(document.getElementById('stat-stock').textContent) || 0;
     const diff = qty - currentStock;
 
+    if (diff !== 0) {
+      await apiPost('/stockmovements', {
+        equipment: '/equipment/' + currentEquipment.id,
+        amount: diff,
+        description: 'Inventaire app',
+        type: 'mutation',
+        stock_location: '/stocklocations/1'
+      });
+    }
+
     scanCount++;
     sessionLog.unshift({
       id: currentEquipment.id,
@@ -576,8 +586,7 @@ async function saveStock() {
       code: currentEquipment.code,
       qr: currentEquipment.qrcodes,
       stockAvant: currentStock,
-      qty,
-      diff,
+      qty, diff,
       time: new Date(),
       ok: true
     });
@@ -585,7 +594,14 @@ async function saveStock() {
     showToast('✓ Enregistré — ' + qty + ' unités (Δ' + (diff >= 0 ? '+' : '') + diff + ')', 'success');
     hideArticleCard();
     setTimeout(() => { if (currentTab === 'scan') startScanner(); }, 1500);
+
   } catch(e) {
+    sessionLog.unshift({
+      id: currentEquipment.id,
+      name: currentEquipment.name || currentEquipment.displayname,
+      qty, time: new Date(), ok: false
+    });
+    showToast('Erreur sauvegarde', 'error');
     console.error(e);
   } finally {
     btn.disabled = false;
@@ -593,46 +609,4 @@ async function saveStock() {
   }
 }
 
-// ── LOG ──
-function renderLog() {
-  const list = document.getElementById('log-list');
-  if (!sessionLog.length) { list.innerHTML = '<div class="log-empty">Aucun scan pour l\'instant</div>'; return; }
-  list.innerHTML = sessionLog.map(e => `
-    <div class="log-item">
-      <div class="log-dot ${e.ok ? '' : 'err'}"></div>
-      <div>
-        <div class="log-name">${e.name || '—'}</div>
-        <div class="log-meta">${e.code || '#' + e.id} · ${e.time.toLocaleTimeString('fr-FR')}</div>
-      </div>
-      <div class="log-qty" style="color:${e.ok ? 'var(--green)' : 'var(--accent2)'}">${e.ok ? e.qty : '⚠'}</div>
-    </div>`).join('');
-}
 
-function exportCSV() {
-  if (!sessionLog.length) { showToast('Aucune donnée', 'error'); return; }
-  const rows = ['ID,Nom,Code,Quantité,Heure,Statut',
-    ...sessionLog.map(e => `${e.id},"${e.name}","${e.code||''}",${e.qty},${e.time.toLocaleTimeString('fr-FR')},${e.ok?'OK':'ERREUR'}`)];
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' }));
-  a.download = 'inventaire_' + new Date().toISOString().slice(0,10) + '.csv';
-  a.click();
-}
-
-// ── UI ──
-function showLoading(msg) {
-  document.getElementById('loading-text').textContent = msg || 'Chargement…';
-  document.getElementById('loading-overlay').classList.add('show');
-}
-function hideLoading() { document.getElementById('loading-overlay').classList.remove('show'); }
-
-let toastTimer;
-function showToast(msg, type) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'show ' + (type || 'success');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = ''; }, 3000);
-}
-</script>
-</body>
-</html>
