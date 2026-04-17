@@ -1,5 +1,4 @@
 const https = require('https');
-const crypto = require('crypto');
 
 exports.handler = async (event) => {
   const API_KEY = process.env.RENTMAN_API_KEY;
@@ -25,39 +24,26 @@ exports.handler = async (event) => {
       'Accept': 'application/json'
     };
 
-    // Add HMAC signature for write operations (Rentman requires it)
-    if (bodyBuf) {
-      const hmac = crypto.createHmac('sha256', API_KEY);
-      hmac.update(bodyBuf);
-      const digest = hmac.digest('base64');
-      reqHeaders['Digest'] = 'sha256=' + digest;
-      reqHeaders['Content-Length'] = bodyBuf.length;
-      console.log('DIGEST:', 'sha256=' + digest.slice(0,20) + '...');
-    }
+    if (bodyBuf) reqHeaders['Content-Length'] = bodyBuf.length;
 
-    console.log('METHOD:', method, 'PATH:', rawPath);
-
-    const options = {
+    const req = https.request({
       hostname: 'api.rentman.net',
       port: 443,
       path: rawPath,
       method: method,
       headers: reqHeaders,
       agent: new https.Agent({ keepAlive: false })
-    };
-
-    const req = https.request(options, (res) => {
+    }, (res) => {
       const chunks = [];
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        console.log('STATUS:', res.statusCode, '| BODY:', body.slice(0,200));
+        console.log(method, rawPath, '->', res.statusCode);
         resolve({ statusCode: res.statusCode, headers: cors, body });
       });
     });
 
     req.on('error', (e) => {
-      console.log('ERROR:', e.message);
       resolve({ statusCode: 500, headers: cors, body: JSON.stringify({ error: e.message }) });
     });
 
