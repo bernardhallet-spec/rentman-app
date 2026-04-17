@@ -17,14 +17,14 @@ exports.handler = async (event) => {
 
   return new Promise((resolve) => {
     const bodyBuf = bodyData ? Buffer.from(bodyData, 'utf8') : null;
-
     const reqHeaders = {
       'Authorization': 'Bearer ' + API_KEY,
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
-
     if (bodyBuf) reqHeaders['Content-Length'] = bodyBuf.length;
+
+    console.log(method, rawPath, '| KEY:', API_KEY ? API_KEY.slice(0,20) + '...' : 'MISSING');
 
     const req = https.request({
       hostname: 'api.rentman.net',
@@ -38,15 +38,12 @@ exports.handler = async (event) => {
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        console.log(method, rawPath, '->', res.statusCode);
+        console.log('STATUS:', res.statusCode, body.slice(0, 150));
         resolve({ statusCode: res.statusCode, headers: cors, body });
       });
     });
 
-    req.on('error', (e) => {
-      resolve({ statusCode: 500, headers: cors, body: JSON.stringify({ error: e.message }) });
-    });
-
+    req.on('error', e => resolve({ statusCode: 500, headers: cors, body: JSON.stringify({ error: e.message }) }));
     if (bodyBuf) req.write(bodyBuf);
     req.end();
   });
