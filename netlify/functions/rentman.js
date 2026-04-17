@@ -1,4 +1,5 @@
 const https = require('https');
+const crypto = require('crypto');
 
 exports.handler = async (event) => {
   const API_KEY = process.env.RENTMAN_API_KEY;
@@ -17,14 +18,27 @@ exports.handler = async (event) => {
 
   return new Promise((resolve) => {
     const bodyBuf = bodyData ? Buffer.from(bodyData, 'utf8') : null;
+
+    // Format standard Bearer
+    const authHeader = 'Bearer ' + API_KEY;
+
     const reqHeaders = {
-      'Authorization': 'Bearer ' + API_KEY,
+      'Authorization': authHeader,
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
-    if (bodyBuf) reqHeaders['Content-Length'] = bodyBuf.length;
 
-    console.log(method, rawPath, '| KEY:', API_KEY ? API_KEY.slice(0,20) + '...' : 'MISSING');
+    if (bodyBuf) {
+      reqHeaders['Content-Length'] = bodyBuf.length;
+      // Ajouter le hash HMAC du body comme Digest header
+      const hmac = crypto.createHmac('sha256', API_KEY);
+      hmac.update(bodyBuf);
+      const digest = hmac.digest('base64');
+      reqHeaders['X-Digest'] = digest;
+      console.log('Sending X-Digest:', digest.slice(0,20) + '...');
+    }
+
+    console.log(method, rawPath);
 
     const req = https.request({
       hostname: 'api.rentman.net',
@@ -38,7 +52,7 @@ exports.handler = async (event) => {
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        console.log('STATUS:', res.statusCode, body.slice(0, 150));
+        console.log('STATUS:', res.statusCode, body.slice(0, 200));
         resolve({ statusCode: res.statusCode, headers: cors, body });
       });
     });
